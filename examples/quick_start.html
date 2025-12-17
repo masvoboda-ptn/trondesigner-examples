@@ -1,0 +1,25 @@
+<html lang="en">
+<head>
+    <script>
+        function tronDesignerInitialized() {
+            window.tronDesigner
+                .setExactProduct("PFC", undefined, (b) => b.addVariant("10000205"))
+                .addExactPrinting("front", "PAD03")
+                .open({ mode: "dialog" });
+        }
+    </script>
+    <script
+            async
+            src="{TD_URL}/js/website-integration.js"
+            referrerpolicy="origin"
+            data-td-api="{TD_URL}/api"
+            data-td-api-key="{TD_API_KEY}"
+            data-td-script-initialized-callback="tronDesignerInitialized"
+    ></script>
+</head>
+<body>
+<div>
+    <h1>Tron Designer Integration Example</h1>
+</div>
+</body>
+</html>

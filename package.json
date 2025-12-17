@@ -2,25 +2,20 @@
   "name": "trondesigner-examples",
   "version": "1.0.0",
   "description": "",
-  "main": "config.local.js",
   "directories": {
     "example": "examples"
   },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "run": "node server.mjs"
   },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/masvoboda-ptn/trondesigner-examples.git"
   },
   "keywords": [],
-  "author": "",
+  "author": "PromoTron s.r.o.",
   "license": "ISC",
   "type": "commonjs",
-  "bugs": {
-    "url": "https://github.com/masvoboda-ptn/trondesigner-examples/issues"
-  },
-  "homepage": "https://github.com/masvoboda-ptn/trondesigner-examples#readme",
   "dependencies": {
     "dotenv": "^17.2.3",
     "express": "^5.2.1"

@@ -1,0 +1,43 @@
+<html lang="en">
+<head>
+    <script
+            async
+            src="{TD_URL}/js/website-integration.js"
+            referrerpolicy="origin"
+            data-td-api="{TD_URL}/api"
+            data-td-api-key="{TD_API_KEY}"
+    ></script>
+    <script>
+        const td_subscribe = () => {
+            window.tronDesigner.subscribeDesignerEvent("printJob", "created", (event) => {
+                console.log("Print Job Created:");
+                console.log(event);
+            });
+            console.log("Subscribed to 'printJob created' event.");
+        }
+
+        const td_check = () => {
+            if (window.tronDesigner) {
+                td_subscribe();
+            } else {
+                setTimeout(td_check, 100);
+            }
+        }
+        td_check();
+    </script>
+    <title>Tron Designer Integration - Attributes Basic Example</title>
+</head>
+<body>
+<div>
+    <!-- Product “Customize” button -->
+    <button
+            data-td-action="OpenCreate"
+            data-td-supplier-code="PFC"
+            data-td-product-code="10000205"
+            data-td-print-position-code="front"
+            data-td-print-technology-code="PAD03">
+        Oregon 400 ml - Red
+    </button>
+</div>
+</body>
+</html>
