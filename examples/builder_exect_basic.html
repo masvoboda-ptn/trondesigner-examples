@@ -1,0 +1,35 @@
+<html lang="en">
+<head>
+    <script
+            async
+            src="{TD_URL}/js/website-integration.js"
+            referrerpolicy="origin"
+            data-td-api="{TD_URL}/api"
+            data-td-api-key="{TD_API_KEY}"
+    ></script>
+    <script>
+        const td_open = () => {
+            console.log("Opening Tron Designer...");
+            const td = window.tronDesigner;
+            td.setExactProduct('PFC', undefined, (b) => {
+                b.addVariant('10086021');
+            });
+            td.addExactPrinting('front', 'PAD03');
+            console.log(td.argsBuilder.build())
+            td.openDesigner(td.argsBuilder.build(), { mode: "dialog" });
+        }
+    </script>
+    <title>Tron Designer Integration - JS Builder Basic Example</title>
+</head>
+<body>
+<div>
+    <!-- Opens Oregon 400 ml - Red directly for graphics creation -->
+    <button onclick="td_open()">
+        Oregon 400 ml - Red
+    </button>
+</div>
+<div>
+    <a href="index.html">Back to root</a>
+</div>
+</body>
+</html>
