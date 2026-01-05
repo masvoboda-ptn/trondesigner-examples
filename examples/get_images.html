@@ -1,0 +1,105 @@
+<html lang="en">
+<head>
+    <script
+            async
+            src="{TD_URL}/js/website-integration.js"
+            referrerpolicy="origin"
+            data-td-api="{TD_URL}/api"
+            data-td-api-key="{TD_API_KEY}"
+    ></script>
+    <script>
+        const td_subscribe = () => {
+            window.tronDesigner.subscribeDesignerEvent("printJob", "created", (event) => {
+                console.log("Print Job Created:");
+                console.log(event);
+
+                if (event.entityType !== "printJob") {
+                    console.error("Unexpected entity type:", event.entityType);
+                    return;
+                }
+
+                const printJob = event.detail;
+                const printJobGuid = printJob.printJobGuid;
+                printJob.printings.forEach((p) => {
+                    // create a DIV section for each printing
+                    const printingDiv = document.createElement('div');
+                    printingDiv.innerHTML = `
+                        <h3>Printing GUID: ${p.printingGuid}</h3>
+                        <p>Print Position: ${p.printData.positionCodeDisplay}</p>
+                        <p>Print Technology: ${p.printData.technologyCodeDisplay}</p>
+                    `;
+                    document.body.appendChild(printingDiv);
+
+                    console.log(`printing Guid: ${p.printingGuid}`);
+                    // get motive area image
+                    const motiveImageContainer = document.createElement('div');
+                    motiveImageContainer.innerHTML = `<h4>Motive Area Image:</h4>`;
+                    printingDiv.appendChild(motiveImageContainer);
+                    window.tronDesigner.getPrintingMotive(printJobGuid, p.printingGuid).then((imageData) => {
+                        // imageData is a Blob containing the motive area image
+                        console.log(`Motive area image data for printing ${p.printingGuid}:`, imageData);
+                        // Example: create an image element to display the motive area
+                        const imgURL = URL.createObjectURL(imageData);
+                        const imgElement = document.createElement('img');
+                        imgElement.src = imgURL;
+                        imgElement.alt = `Motive area for printing ${p.printingGuid}`;
+                        imgElement.style.maxWidth = '250px';
+                        imgElement.style.maxHeight = '250px';
+
+                        motiveImageContainer.appendChild(imgElement);
+                    }).catch((error) => {
+                        console.error(`Error fetching motive area image for printing ${p.printingGuid}:`, error);
+                    });
+
+                    // get printing visualization image
+                    const printingImageContainer = document.createElement('div');
+                    printingImageContainer.innerHTML = `<h4>Visualization Image:</h4>`;
+                    printingDiv.appendChild(printingImageContainer);
+                    window.tronDesigner.getPrintingImage(printJobGuid, p.printingGuid).then((imageData) => {
+                        // imageData is a Blob containing the visualization image
+                        console.log(`Visualization image data for printing ${p.printingGuid}:`, imageData);
+                        // Example: create an image element to display the motive area
+                        const imgURL = URL.createObjectURL(imageData);
+                        const imgElement = document.createElement('img');
+                        imgElement.src = imgURL;
+                        imgElement.alt = `Motive area for printing ${p.printingGuid}`;
+                        imgElement.style.maxWidth = '250px';
+                        imgElement.style.maxHeight = '250px';
+
+                        printingImageContainer.appendChild(imgElement);
+                    }).catch((error) => {
+                        console.error(`Error fetching motive area image for printing ${p.printingGuid}:`, error);
+                    });
+                })
+            });
+            console.log("Subscribed to 'printJob created' event.");
+        }
+
+        const td_check = () => {
+            if (window.tronDesigner) {
+                td_subscribe();
+            } else {
+                setTimeout(td_check, 100);
+            }
+        }
+        td_check();
+    </script>
+    <title>Tron Designer Integration - Attributes Basic Example</title>
+</head>
+<body>
+<div>
+    <!-- Product “Customize” button -->
+    <button
+            data-td-action="OpenCreate"
+            data-td-supplier-code="PFC"
+            data-td-product-code="10086021"
+            data-td-print-position-code="front"
+            data-td-print-technology-code="PAD03">
+        Oregon 400 ml - Red
+    </button>
+</div>
+<div>
+    <a href="index.html">Back to root</a>
+</div>
+</body>
+</html>
