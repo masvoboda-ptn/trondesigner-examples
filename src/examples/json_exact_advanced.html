@@ -1,0 +1,778 @@
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="/assets/style.css">
+    <script
+            async
+            src="{TD_URL}/js/website-integration.js"
+            referrerpolicy="origin"
+            data-td-api="{TD_URL}/api"
+            data-td-api-key="{TD_API_KEY}"
+            data-td-script-initialized-callback="onTdReady"
+    ></script>
+    <style>
+        .step-label {
+            display: inline-block;
+            background: #0066cc;
+            color: white;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 6px;
+        }
+
+        .step-label.disabled { background: #999; }
+
+        .item-table {
+            border-collapse: collapse;
+            width: 100%;
+            font-size: 13px;
+        }
+
+        .item-table th {
+            text-align: left;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: #777;
+            border-bottom: 1px solid #e0e0e0;
+            padding: 6px 8px;
+        }
+
+        .item-table td {
+            border-bottom: 1px solid #f0f0f0;
+            padding: 6px 8px;
+            vertical-align: middle;
+        }
+
+        .item-table code { font-size: 12px; }
+
+        .btn-sm {
+            width: auto;
+            min-width: 80px;
+            padding: 5px 10px;
+            font-size: 12px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        .btn-sm:disabled,
+        .btn:disabled {
+            cursor: not-allowed;
+            opacity: 0.45;
+        }
+
+        .btn-sm:hover:enabled { background-color: #ddd; }
+
+        .badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 11px;
+            font-weight: bold;
+        }
+
+        .badge.in { background: #e2f5e2; color: #1d6b1d; }
+        .badge.out { background: #f0f0f0; color: #888; }
+        .badge.base { background: #fdeef2; color: #cf0d3e; }
+
+        .state-panel {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+
+        .state-panel > div { flex: 1 1 340px; }
+
+        .thumbs {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .thumbs figure {
+            margin: 0;
+            text-align: center;
+            font-size: 11px;
+            color: #666;
+        }
+
+        .thumbs img {
+            width: 110px;
+            height: 110px;
+            object-fit: contain;
+            border: solid 1px #e0e0e0;
+            border-radius: 5px;
+            background: #fff;
+        }
+
+        .placeholder {
+            width: 250px;
+            height: 250px;
+            border: dashed 2px #e0e0e0;
+            border-radius: 5px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            color: #aaa;
+            font-size: 13px;
+            padding: 10px;
+            box-sizing: border-box;
+        }
+
+        .code-panel {
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 15px;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            overflow: auto;
+            max-height: 340px;
+            white-space: pre;
+            margin: 0;
+        }
+
+        .event-log {
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 15px;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            height: 300px;
+            overflow-y: auto;
+            margin-top: 10px;
+        }
+
+        .event-entry { padding: 8px 0; border-bottom: 1px solid #333; }
+        .event-time { color: #858585; font-size: 11px; }
+        .event-type { color: #4ec9b0; font-weight: bold; }
+        .event-action { color: #dcdcaa; }
+
+        .event-data {
+            color: #ce9178;
+            margin-left: 20px;
+            font-size: 12px;
+            white-space: pre-wrap;
+        }
+
+        .section { margin: 30px 20px; }
+    </style>
+    <script>
+        // ---------------------------------------------------------------
+        // Catalogue data used by this example - Teak notebook (supplier PFC)
+        // ---------------------------------------------------------------
+        const SUPPLIER_CODE = 'PFC';
+
+        const BASE_VARIANT = {code: '10601321', name: 'Teak notebook - Red'};
+        const OPTIONAL_VARIANTS = [
+            {code: '10601301', name: 'Teak notebook - White'},
+            {code: '10601331', name: 'Teak notebook - Orange'}
+        ];
+
+        const BASE_PRINTING = {printPositionCode: 'front', printTechnologyCode: 'GPE01', name: 'Front'};
+        const OPTIONAL_PRINTING = {printPositionCode: 'back', printTechnologyCode: 'GPE01', name: 'Back'};
+
+        // Host page state - drives which actions are offered.
+        const state = {
+            printJobGuid: null,
+            variants: [],   // product codes currently in the print job
+            printings: []   // [{printPositionCode, printTechnologyCode}]
+        };
+
+        function onTdReady() {
+            logEvent('Script', 'Initialized', 'TronDesigner API is ready');
+
+            const td = window.tronDesigner;
+            td.subscribeDesignerEvent('printJob', 'created', onPrintJobCreated);
+            td.subscribeDesignerEvent('printJob', 'updated', onPrintJobUpdated);
+
+            render();
+        }
+
+        // ---------------------------------------------------------------
+        // Step 1 - create the print job (red variant, front printing only)
+        // ---------------------------------------------------------------
+        const td_create = () => {
+            openWithArgs('Create print job', {
+                openMode: 'Create',
+                dataMode: 'Exact',
+                printJob: {
+                    addPrintings: [
+                        {
+                            printPositionCode: BASE_PRINTING.printPositionCode,
+                            printTechnologyCode: BASE_PRINTING.printTechnologyCode
+                        }
+                    ],
+                    addProducts: {
+                        supplierCode: SUPPLIER_CODE,
+                        variants: [
+                            {productCode: BASE_VARIANT.code}
+                        ]
+                    }
+                }
+            });
+        };
+
+        // ---------------------------------------------------------------
+        // Step 2 - add variants / printings to the EXISTING print job.
+        // Only the delta is sent: printings and variants that are already
+        // part of the print job are NOT repeated in the arguments.
+        // ---------------------------------------------------------------
+        const td_add_variants = (productCodes) => {
+            if (!requirePrintJob()) return;
+
+            openWithArgs(`Add variant(s) ${productCodes.join(', ')}`, {
+                openMode: 'Edit',
+                dataMode: 'Exact',
+                printJob: {
+                    printJobGuid: state.printJobGuid,
+                    addProducts: {
+                        supplierCode: SUPPLIER_CODE,
+                        variants: productCodes.map(productCode => ({productCode}))
+                    }
+                }
+            });
+        };
+
+        const td_add_printing = () => {
+            if (!requirePrintJob()) return;
+
+            openWithArgs(`Add printing ${OPTIONAL_PRINTING.printPositionCode}`, {
+                openMode: 'Edit',
+                dataMode: 'Exact',
+                printJob: {
+                    printJobGuid: state.printJobGuid,
+                    addPrintings: [
+                        {
+                            printPositionCode: OPTIONAL_PRINTING.printPositionCode,
+                            printTechnologyCode: OPTIONAL_PRINTING.printTechnologyCode
+                        }
+                    ]
+                }
+            });
+        };
+
+        // ---------------------------------------------------------------
+        // Step 3 - remove variants / printings from the print job.
+        // Same Edit mode call, only with removeProducts / removePrintings.
+        // ---------------------------------------------------------------
+        const td_remove_variants = (productCodes) => {
+            if (!requirePrintJob()) return;
+
+            openWithArgs(`Remove variant(s) ${productCodes.join(', ')}`, {
+                openMode: 'Edit',
+                dataMode: 'Exact',
+                printJob: {
+                    printJobGuid: state.printJobGuid,
+                    removeProducts: {
+                        variants: productCodes.map(productCode => ({productCode}))
+                    }
+                }
+            });
+        };
+
+        const td_remove_printing = () => {
+            if (!requirePrintJob()) return;
+
+            openWithArgs(`Remove printing ${OPTIONAL_PRINTING.printPositionCode}`, {
+                openMode: 'Edit',
+                dataMode: 'Exact',
+                printJob: {
+                    printJobGuid: state.printJobGuid,
+                    removePrintings: [
+                        {
+                            printPositionCode: OPTIONAL_PRINTING.printPositionCode,
+                            printTechnologyCode: OPTIONAL_PRINTING.printTechnologyCode
+                        }
+                    ]
+                }
+            });
+        };
+
+        // ---------------------------------------------------------------
+        // Opening the editor + reacting to the result
+        // ---------------------------------------------------------------
+        function openWithArgs(label, args) {
+            const td = window.tronDesigner;
+            if (!td) {
+                alert('TronDesigner SDK is not initialized yet.');
+                return;
+            }
+
+            document.getElementById('payload-json').textContent = JSON.stringify(args, null, 2);
+            logEvent('Action', label, 'openDesigner()', args);
+
+            td.openDesigner(args, {
+                mode: 'dialog',
+                // onClose fires whenever the editor dialog is closed - confirmed or not.
+                onClose: (reason) => onDesignerClosed(label, reason)
+            });
+        }
+
+        function onPrintJobCreated(event) {
+            // For printJob events the callback gets {entityType, eventType, entityGuid, detail}.
+            state.printJobGuid = event.entityGuid;
+            state.variants = [BASE_VARIANT.code];
+            state.printings = [{
+                printPositionCode: BASE_PRINTING.printPositionCode,
+                printTechnologyCode: BASE_PRINTING.printTechnologyCode
+            }];
+
+            logEvent('PrintJob', 'Created', `GUID: ${event.entityGuid}`);
+            render();
+        }
+
+        function onPrintJobUpdated(event) {
+            logEvent('PrintJob', 'Updated', `GUID: ${event.entityGuid}`);
+        }
+
+        async function onDesignerClosed(label, reason) {
+            logEvent('Editor', 'Closed', `${label} - reason: ${reason}`);
+
+            if (!state.printJobGuid) {
+                logEvent('Hint', 'No GUID', 'Confirm the design in the editor - the print job GUID is only issued once the print job is created.');
+                render();
+                return;
+            }
+
+            // Read the print job back from the API so the page shows the real
+            // content instead of only what this page asked for.
+            try {
+                const printJob = await window.tronDesigner.getPrintJob(state.printJobGuid);
+                console.warn(printJob);
+                syncFromPrintJob(printJob);
+                renderSnapshot(printJob);
+                logEvent('API', 'getPrintJob', `variants: ${state.variants.length}, printings: ${state.printings.length}`);
+            } catch (error) {
+                logEvent('API', 'getPrintJob failed', error && error.message ? error.message : String(error));
+            }
+
+            render();
+        }
+
+        function syncFromPrintJob(printJob) {
+            const variants = ((printJob.product && printJob.product.variants) || [])
+                .map(variant => variant.codeSupplier)
+                .filter(Boolean);
+            if (variants.length) {
+                state.variants = variants;
+            }
+
+            const printings = (printJob.printings || []).map(printing => {
+                const printData = printing.printData || {};
+                return {
+                    printPositionCode: printData.positionCodePtn || printData.positionCodeDisplay || null,
+                    printTechnologyCode: printData.technologyCodePtn || printData.technologyCodeDisplay || null
+                };
+            });
+            // Trust the API list only when it carries the position codes,
+            // otherwise keep what this page tracked locally.
+            if (printings.length && printings.every(printing => printing.printPositionCode)) {
+                state.printings = printings;
+            }
+        }
+
+        function requirePrintJob() {
+            if (!state.printJobGuid) {
+                alert('Create the print job first (step 1).');
+                return false;
+            }
+            return true;
+        }
+
+        function td_reset() {
+            state.printJobGuid = null;
+            state.variants = [];
+            state.printings = [];
+            document.getElementById('payload-json').textContent = '(no request sent yet)';
+            document.getElementById('snapshot-json').textContent = '(no print job loaded yet)';
+            document.getElementById('variant-thumbs').innerHTML = '';
+            logEvent('Demo', 'Reset', 'Host page state cleared - the print job itself still exists in TronDesigner.');
+            render();
+        }
+
+        // ---------------------------------------------------------------
+        // Rendering
+        // ---------------------------------------------------------------
+        function hasVariant(productCode) {
+            return state.variants.includes(productCode);
+        }
+
+        function hasPrinting(printing) {
+            return state.printings.some(p =>
+                (p.printPositionCode || '').toLowerCase() === printing.printPositionCode.toLowerCase());
+        }
+
+        function render() {
+            // onTdReady can fire before the body is parsed - nothing to render yet.
+            if (!document.getElementById('variant-rows')) return;
+
+            const created = !!state.printJobGuid;
+
+            document.getElementById('guid-display').textContent = created ? state.printJobGuid : '(not created yet)';
+            document.getElementById('create-btn').disabled = created;
+            document.getElementById('reset-btn').disabled = !created;
+            document.getElementById('step2-label').className = created ? 'step-label' : 'step-label disabled';
+            document.getElementById('step3-label').className = created ? 'step-label' : 'step-label disabled';
+
+            // Variants
+            document.getElementById('variant-rows').innerHTML = [
+                `<tr>
+                    <td><strong>${BASE_VARIANT.name}</strong><br><code>${BASE_VARIANT.code}</code></td>
+                    <td><span class="badge base">base variant</span></td>
+                    <td colspan="2"><small>Kept for the whole demo</small></td>
+                </tr>`,
+                ...OPTIONAL_VARIANTS.map(variant => {
+                    const present = hasVariant(variant.code);
+                    return `<tr>
+                        <td><strong>${variant.name}</strong><br><code>${variant.code}</code></td>
+                        <td><span class="badge ${present ? 'in' : 'out'}">${present ? 'in print job' : 'not added'}</span></td>
+                        <td><button class="btn-sm" ${!created || present ? 'disabled' : ''}
+                                onclick="td_add_variants(['${variant.code}'])">Add</button></td>
+                        <td><button class="btn-sm" ${!created || !present ? 'disabled' : ''}
+                                onclick="td_remove_variants(['${variant.code}'])">Remove</button></td>
+                    </tr>`;
+                })
+            ].join('');
+
+            const optionalCodes = OPTIONAL_VARIANTS.map(variant => variant.code);
+            const missingCodes = optionalCodes.filter(code => !hasVariant(code));
+            const presentCodes = optionalCodes.filter(code => hasVariant(code));
+
+            const addBothBtn = document.getElementById('add-both-btn');
+            addBothBtn.disabled = !created || missingCodes.length === 0;
+            addBothBtn.onclick = () => td_add_variants(missingCodes);
+
+            const removeBothBtn = document.getElementById('remove-both-btn');
+            removeBothBtn.disabled = !created || presentCodes.length === 0;
+            removeBothBtn.onclick = () => td_remove_variants(presentCodes);
+
+            // Printings
+            const backPresent = hasPrinting(OPTIONAL_PRINTING);
+            document.getElementById('printing-rows').innerHTML = `
+                <tr>
+                    <td><strong>${BASE_PRINTING.name}</strong><br>
+                        <code>${BASE_PRINTING.printPositionCode}</code> / <code>${BASE_PRINTING.printTechnologyCode}</code></td>
+                    <td><span class="badge base">base printing</span></td>
+                    <td colspan="2"><small>Created in step 1</small></td>
+                </tr>
+                <tr>
+                    <td><strong>${OPTIONAL_PRINTING.name}</strong><br>
+                        <code>${OPTIONAL_PRINTING.printPositionCode}</code> / <code>${OPTIONAL_PRINTING.printTechnologyCode}</code></td>
+                    <td><span class="badge ${backPresent ? 'in' : 'out'}">${backPresent ? 'in print job' : 'not added'}</span></td>
+                    <td><button class="btn-sm" ${!created || backPresent ? 'disabled' : ''} onclick="td_add_printing()">Add</button></td>
+                    <td><button class="btn-sm" ${!created || !backPresent ? 'disabled' : ''} onclick="td_remove_printing()">Remove</button></td>
+                </tr>`;
+
+            document.getElementById('tracked-state').textContent = JSON.stringify(state, null, 2);
+        }
+
+        function renderSnapshot(printJob) {
+            document.getElementById('snapshot-json').textContent = JSON.stringify({
+                printJobGuid: printJob.printJobGuid,
+                title: printJob.title,
+                state: printJob.state,
+                supplier: printJob.supplier,
+                variants: ((printJob.product && printJob.product.variants) || []).map(variant => ({
+                    productCode: variant.codeSupplier,
+                    title: variant.title,
+                    quantity: variant.quantity
+                })),
+                printings: (printJob.printings || []).map(printing => ({
+                    printingGuid: printing.printingGuid,
+                    printData: printing.printData
+                }))
+            }, null, 2);
+
+            // Variant preview images come straight from the API response.
+            const thumbs = ((printJob.product && printJob.product.variants) || [])
+                .filter(variant => variant.previewImageUrl)
+                .map(variant => `
+                    <figure>
+                        <img src="${variant.previewImageUrl}" alt="${variant.title || variant.codeSupplier}">
+                        <figcaption>${variant.codeSupplier}</figcaption>
+                    </figure>`)
+                .join('');
+            document.getElementById('variant-thumbs').innerHTML = thumbs;
+        }
+
+        // ---------------------------------------------------------------
+        // Event log
+        // ---------------------------------------------------------------
+        let eventLog = [];
+
+        function logEvent(type, action, message, data = null) {
+            eventLog.push({timestamp: new Date().toLocaleTimeString(), type, action, message, data});
+            updateEventLog();
+        }
+
+        function updateEventLog() {
+            const logContainer = document.getElementById('event-log');
+            if (!logContainer) return;
+            logContainer.innerHTML = eventLog.map(e => `
+                <div class="event-entry">
+                    <span class="event-time">[${e.timestamp}]</span>
+                    <span class="event-type">${e.type}</span>.<span class="event-action">${e.action}</span>
+                    ${e.message ? '- ' + e.message : ''}
+                    ${e.data !== null && e.data !== undefined
+                        ? `<div class="event-data">${typeof e.data === 'string' ? e.data : JSON.stringify(e.data, null, 2)}</div>`
+                        : ''}
+                </div>
+            `).join('');
+            logContainer.scrollTop = logContainer.scrollHeight;
+        }
+
+        function clearLog() {
+            eventLog = [];
+            updateEventLog();
+        }
+
+        // The SDK loads asynchronously - draw the tables as soon as the DOM is ready.
+        document.addEventListener('DOMContentLoaded', render);
+    </script>
+    <title>Tron Designer Integration - JSON Exact Advanced (Add / Remove Variants and Printings)</title>
+</head>
+<body>
+<div class="header">
+    <div><a href="https://www.trondesigner.com"><img src="https://cdn-webassets.promotron.com/images/td/logo-full-light-theme.svg" class="logo"></a></div>
+    <h1>
+        <span>TronDesigner</span> - Integration Examples<br>
+        <small>Docs:
+            <a href="https://help.promotron.com/en/help/articles/5362575-integration-scenarios" target="_blank">Scenarios</a> &nbsp;|&nbsp;
+            <a href="https://help.promotron.com/en/help/articles/8234354-integration-logic" target="_blank">Modes</a> &nbsp;|&nbsp;
+            <a href="https://help.promotron.com/en/help/collections/5977087-developer-guide" target="_blank">Developer Guide</a>
+        </small>
+    </h1>
+    <a href="index.html">Back to examples</a>
+</div>
+
+<div class="info-box" style="margin: 0 20px;">
+    <h3>JSON - Exact (Advanced): adding and removing variants and printings</h3>
+    <p>The <a href="json_exact_basic.html">basic JSON - Exact</a> example opens the editor once with a fixed product and printing.
+        This example continues from there: the same print job is reopened in <code>Edit</code> mode to grow and shrink its content.</p>
+    <ol>
+        <li><strong>Create</strong> - Teak notebook <code>10601321</code> (red) with a single <code>front</code> / <code>GPE01</code> printing.
+            When the print job is created, its GUID is captured from the <code>printJob.created</code> event and the follow-up actions become available.</li>
+        <li><strong>Add</strong> - reopen with <code>openMode: "Edit"</code> plus <code>addProducts</code> / <code>addPrintings</code>
+            for the white <code>10601301</code> and orange <code>10601331</code> variants and the <code>back</code> / <code>GPE01</code> printing.</li>
+        <li><strong>Remove</strong> - the same <code>Edit</code> call with <code>removeProducts</code> / <code>removePrintings</code> takes them out again.</li>
+    </ol>
+    <p><strong>Key rule:</strong> in <code>Edit</code> mode you send only the <em>delta</em>. Variants and printings that are already part of the
+        print job are never repeated in the arguments - listing them again would add them a second time. The print job is identified by
+        <code>printJob.printJobGuid</code>.</p>
+    <p>After every editor session the page calls <code>tronDesigner.getPrintJob(guid)</code> and shows what the print job really contains.</p>
+</div>
+
+<div class="examples">
+    <div class="example">
+        <div class="placeholder" id="product-placeholder">
+            Variant previews appear here<br>once the print job exists
+        </div>
+        <div class="actions">
+            <span class="step-label">Step 1</span>
+            <h4>Create print job</h4>
+            <p style="text-align: left; font-size: 13px;">
+                Supplier <code>PFC</code><br>
+                Variant <code>10601321</code> (red)<br>
+                Printing <code>front</code> / <code>GPE01</code>
+            </p>
+            <button class="btn" id="create-btn" onclick="td_create()">
+                Open Designer
+                <br>
+                <small>Create - Teak notebook, front print</small>
+            </button>
+            <button class="btn" id="reset-btn" onclick="td_reset()" disabled>
+                Reset demo
+                <br>
+                <small>Forget the captured GUID</small>
+            </button>
+            <p style="text-align: left; font-size: 13px;">
+                <strong>Print job GUID:</strong><br><code id="guid-display">(not created yet)</code>
+            </p>
+        </div>
+    </div>
+
+    <div class="example" style="width: 420px;">
+        <span class="step-label disabled" id="step2-label">Step 2</span>
+        <h4 style="margin-top: 6px;">Product variants</h4>
+        <table class="item-table">
+            <thead>
+            <tr>
+                <th>Variant</th>
+                <th>State</th>
+                <th colspan="2">Action</th>
+            </tr>
+            </thead>
+            <tbody id="variant-rows"></tbody>
+        </table>
+        <div style="margin-top: 12px; display: flex; gap: 8px;">
+            <button class="btn-sm" id="add-both-btn" disabled>Add both variants</button>
+            <button class="btn-sm" id="remove-both-btn" disabled>Remove both variants</button>
+        </div>
+        <p style="font-size: 12px; color: #777;">
+            One <code>openDesigner</code> call can carry several variants at once - the buttons above send both codes in a single
+            <code>addProducts.variants</code> / <code>removeProducts.variants</code> array.
+        </p>
+    </div>
+
+    <div class="example" style="width: 420px;">
+        <span class="step-label disabled" id="step3-label">Step 2 / 3</span>
+        <h4 style="margin-top: 6px;">Printings</h4>
+        <table class="item-table">
+            <thead>
+            <tr>
+                <th>Printing</th>
+                <th>State</th>
+                <th colspan="2">Action</th>
+            </tr>
+            </thead>
+            <tbody id="printing-rows"></tbody>
+        </table>
+        <p style="font-size: 12px; color: #777;">
+            A printing is addressed by its <code>printPositionCode</code> + <code>printTechnologyCode</code> pair, both when adding and when removing.
+        </p>
+    </div>
+</div>
+
+<div class="section">
+    <div class="state-panel">
+        <div>
+            <h3>Last arguments sent to <code>openDesigner()</code></h3>
+            <pre class="code-panel" id="payload-json">(no request sent yet)</pre>
+        </div>
+        <div>
+            <h3>Print job read back with <code>getPrintJob()</code></h3>
+            <pre class="code-panel" id="snapshot-json">(no print job loaded yet)</pre>
+        </div>
+        <div>
+            <h3>State tracked by this page</h3>
+            <pre class="code-panel" id="tracked-state">{}</pre>
+        </div>
+    </div>
+
+    <h3 style="margin-top: 25px;">Variant previews from the print job</h3>
+    <div class="thumbs" id="variant-thumbs"></div>
+</div>
+
+<div class="section">
+    <div style="display: flex; justify-content: space-between; align-items: center;">
+        <h3>Event log</h3>
+        <button class="btn" onclick="clearLog()">Clear Log</button>
+    </div>
+    <div id="event-log" class="event-log">
+        <div style="color: #858585; text-align: center; padding: 50px;">
+            Waiting for events...
+        </div>
+    </div>
+</div>
+
+<div class="section" style="padding: 20px; background: #f9f9f9; border-radius: 8px;">
+    <h3>Implementation</h3>
+
+    <h4>1. Create the print job and capture its GUID</h4>
+    <pre style="background: #fff; padding: 15px; border-radius: 4px; overflow-x: auto; font-size: 12px;"><code>const td = window.tronDesigner;
+let printJobGuid = null;
+
+td.subscribeDesignerEvent("printJob", "created", (event) => {
+    printJobGuid = event.entityGuid;   // event.detail holds the whole print job
+});
+
+td.openDesigner({
+    openMode: "Create",
+    dataMode: "Exact",
+    printJob: {
+        addPrintings: [
+            { printPositionCode: "front", printTechnologyCode: "GPE01" }
+        ],
+        addProducts: {
+            supplierCode: "PFC",
+            variants: [ { productCode: "10601321" } ]
+        }
+    }
+}, {
+    mode: "dialog",
+    onClose: (reason) => console.log("editor closed:", reason)
+});</code></pre>
+
+    <h4 style="margin-top: 20px;">2. Add variants and a printing - Edit mode, delta only</h4>
+    <pre style="background: #fff; padding: 15px; border-radius: 4px; overflow-x: auto; font-size: 12px;"><code>// Add the white and orange variants.
+// The red variant already in the print job is NOT listed again.
+td.openDesigner({
+    openMode: "Edit",
+    dataMode: "Exact",
+    printJob: {
+        printJobGuid: printJobGuid,
+        addProducts: {
+            supplierCode: "PFC",
+            variants: [
+                { productCode: "10601301" },
+                { productCode: "10601331" }
+            ]
+        }
+    }
+}, { mode: "dialog" });
+
+// Add the back printing. The existing front printing is NOT listed again.
+td.openDesigner({
+    openMode: "Edit",
+    dataMode: "Exact",
+    printJob: {
+        printJobGuid: printJobGuid,
+        addPrintings: [
+            { printPositionCode: "back", printTechnologyCode: "GPE01" }
+        ]
+    }
+}, { mode: "dialog" });</code></pre>
+
+    <h4 style="margin-top: 20px;">3. Remove variants and printings</h4>
+    <pre style="background: #fff; padding: 15px; border-radius: 4px; overflow-x: auto; font-size: 12px;"><code>// removeProducts takes variants only - the supplier is already known
+td.openDesigner({
+    openMode: "Edit",
+    dataMode: "Exact",
+    printJob: {
+        printJobGuid: printJobGuid,
+        removeProducts: {
+            variants: [ { productCode: "10601331" } ]
+        }
+    }
+}, { mode: "dialog" });
+
+// removePrintings addresses the printing by position + technology
+td.openDesigner({
+    openMode: "Edit",
+    dataMode: "Exact",
+    printJob: {
+        printJobGuid: printJobGuid,
+        removePrintings: [
+            { printPositionCode: "back", printTechnologyCode: "GPE01" }
+        ]
+    }
+}, { mode: "dialog" });</code></pre>
+
+    <h4 style="margin-top: 20px;">Same operations with the JS builder</h4>
+    <pre style="background: #fff; padding: 15px; border-radius: 4px; overflow-x: auto; font-size: 12px;"><code>td.setPrintJob(printJobGuid, "Edit");            // openMode + printJobGuid
+td.addProductVariantsToPrintJob({ productCode: "10601301" },
+                                { productCode: "10601331" });
+td.addPrintingToPrintJob("back", "GPE01");
+td.open({ mode: "dialog" });
+
+td.setPrintJob(printJobGuid, "Edit");
+td.removeProductVariantsFromPrintJob(["10601301", "10601331"]);
+td.removePrintingFromPrintJob("back", "GPE01");
+td.open({ mode: "dialog" });</code></pre>
+
+    <h4 style="margin-top: 20px;">Reading the result back</h4>
+    <pre style="background: #fff; padding: 15px; border-radius: 4px; overflow-x: auto; font-size: 12px;"><code>const printJob = await td.getPrintJob(printJobGuid);
+
+printJob.product.variants.forEach(v => console.log(v.codeSupplier, v.title, v.previewImageUrl));
+printJob.printings.forEach(p => console.log(p.printingGuid, p.printData));</code></pre>
+</div>
+</body>
+</html>
