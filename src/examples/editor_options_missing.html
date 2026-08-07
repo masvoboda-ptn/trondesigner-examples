@@ -1,0 +1,616 @@
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="/assets/style.css">
+    <script
+            async
+            src="{TD_URL}/js/website-integration.js"
+            referrerpolicy="origin"
+            data-td-api="{TD_URL}/api"
+            data-td-api-key="{TD_API_KEY}"
+            data-td-script-initialized-callback="onTdReady"
+    ></script>
+    <style>
+        .scenario-label {
+            display: inline-block;
+            background: #0066cc;
+            color: white;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 6px;
+        }
+
+        .scenario-label.warn { background: #cf0d3e; }
+
+        .item-table {
+            border-collapse: collapse;
+            width: 100%;
+            font-size: 13px;
+        }
+
+        .item-table th {
+            text-align: left;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: #777;
+            border-bottom: 1px solid #e0e0e0;
+            padding: 5px 6px;
+        }
+
+        .item-table td {
+            border-bottom: 1px solid #f0f0f0;
+            padding: 5px 6px;
+            vertical-align: middle;
+        }
+
+        .item-table code { font-size: 12px; }
+
+        .code-ok { color: #1d6b1d; }
+
+        .code-bad {
+            color: #cf0d3e;
+            font-weight: bold;
+            text-decoration: underline wavy #cf0d3e;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 11px;
+            font-weight: bold;
+        }
+
+        .badge.ok { background: #e2f5e2; color: #1d6b1d; }
+        .badge.bad { background: #fdeef2; color: #cf0d3e; }
+
+        .btn-sm {
+            width: auto;
+            min-width: 80px;
+            padding: 5px 10px;
+            font-size: 12px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        .btn-sm:hover:enabled { background-color: #ddd; }
+
+        .expectation {
+            background: #f4f8ff;
+            border-left: 3px solid #0066cc;
+            padding: 8px 10px;
+            font-size: 12px;
+            line-height: 18px;
+            margin: 12px 0 0;
+        }
+
+        .options-bar {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 20px;
+            margin: 0 20px 10px;
+            padding: 15px;
+            border: solid 1px #e0e0e0;
+            border-radius: 5px;
+            background-color: #fdfdfd;
+            font-size: 13px;
+        }
+
+        .options-bar select {
+            font-size: 13px;
+            padding: 5px;
+            margin-left: 6px;
+        }
+
+        .values-table {
+            border-collapse: collapse;
+            font-size: 13px;
+            margin-top: 10px;
+        }
+
+        .values-table th, .values-table td {
+            border: 1px solid #e0e0e0;
+            padding: 6px 10px;
+            text-align: left;
+            vertical-align: top;
+        }
+
+        .values-table th { background: #f4f4f4; font-size: 12px; }
+
+        .state-panel {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+
+        .state-panel > div { flex: 1 1 420px; }
+
+        .code-panel {
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 15px;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            overflow: auto;
+            max-height: 380px;
+            white-space: pre;
+            margin: 0;
+        }
+
+        .event-log {
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 15px;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            height: 280px;
+            overflow-y: auto;
+            margin-top: 10px;
+        }
+
+        .event-entry { padding: 8px 0; border-bottom: 1px solid #333; }
+        .event-time { color: #858585; font-size: 11px; }
+        .event-type { color: #4ec9b0; font-weight: bold; }
+        .event-action { color: #dcdcaa; }
+
+        .event-data {
+            color: #ce9178;
+            margin-left: 20px;
+            font-size: 12px;
+            white-space: pre-wrap;
+        }
+
+        .section { margin: 30px 20px; }
+    </style>
+    <script>
+        // ---------------------------------------------------------------
+        // Teak notebook (supplier PFC) - 3 variants, 2 printings.
+        // The "XX" suffix marks a code that does not exist in the catalogue.
+        // ---------------------------------------------------------------
+        const SUPPLIER_CODE = 'PFC';
+
+        const RED = {code: '10601321', name: 'Teak notebook - Red'};
+        const WHITE = {code: '10601301', name: 'Teak notebook - White'};
+        const ORANGE = {code: '10601331', name: 'Teak notebook - Orange'};
+
+        const FRONT = {printPositionCode: 'front', printTechnologyCode: 'GPE01', name: 'Front'};
+        const BACK = {printPositionCode: 'back', printTechnologyCode: 'GPE01', name: 'Back'};
+
+        const variant = (source, {broken = false} = {}) => ({
+            productCode: broken ? source.code + 'XX' : source.code,
+            name: source.name,
+            broken
+        });
+
+        const printing = (source, {broken = false} = {}) => ({
+            printPositionCode: broken ? source.printPositionCode + 'XX' : source.printPositionCode,
+            printTechnologyCode: source.printTechnologyCode,
+            name: source.name,
+            broken
+        });
+
+        const SCENARIOS = [
+            {
+                id: 'all-valid',
+                title: '1. Everything valid',
+                broken: false,
+                variants: [variant(RED), variant(WHITE), variant(ORANGE)],
+                printings: [printing(FRONT), printing(BACK)],
+                expectation: 'Nothing is missing, so with <code>Missing</code> neither selector is shown - the editor opens straight into the design with all 3 variants and both printings.'
+            },
+            {
+                id: 'variants-wrong',
+                title: '2. Two variant codes wrong',
+                broken: true,
+                variants: [variant(RED), variant(WHITE, {broken: true}), variant(ORANGE, {broken: true})],
+                printings: [printing(FRONT), printing(BACK)],
+                expectation: 'Two of the three variant codes are not found, so the <strong>variant selector opens</strong> and the user can add or remove any variant of the product. The printings are all found, so the print option selector stays hidden.'
+            },
+            {
+                id: 'one-printing-wrong',
+                title: '3. One printing wrong',
+                broken: true,
+                variants: [variant(RED), variant(WHITE), variant(ORANGE)],
+                printings: [printing(FRONT), printing(BACK, {broken: true})],
+                expectation: 'One printing is not found, so the <strong>print option selector opens</strong> - the valid <code>front</code> printing stays preselected. Variants are all found, so no variant selector.'
+            },
+            {
+                id: 'both-printings-wrong',
+                title: '4. Both printings wrong',
+                broken: true,
+                variants: [variant(RED), variant(WHITE), variant(ORANGE)],
+                printings: [printing(FRONT, {broken: true}), printing(BACK, {broken: true})],
+                expectation: 'Neither printing is found, so the <strong>print option selector opens with nothing preselected</strong> - the user picks the print positions from scratch.'
+            },
+            {
+                id: 'variant-and-printing-wrong',
+                title: '5. One variant and one printing wrong',
+                broken: true,
+                variants: [variant(RED), variant(WHITE), variant(ORANGE, {broken: true})],
+                printings: [printing(FRONT), printing(BACK, {broken: true})],
+                expectation: 'Something is missing on both sides, so <strong>both selectors open</strong> - first the variants (red and white stay preselected), then the print options (<code>front</code> stays preselected). The two options are evaluated independently of each other.'
+            }
+        ];
+
+        const OPTION_VALUES = ['None', 'Selected', 'Missing', 'All'];
+
+        function selectedOptions() {
+            return {
+                showSelectedVariants: document.getElementById('opt-variants').value,
+                showSelectedPrintOptions: document.getElementById('opt-printings').value
+            };
+        }
+
+        // ---------------------------------------------------------------
+        // Building the editor arguments
+        // ---------------------------------------------------------------
+        function buildArgs(scenario) {
+            return {
+                openMode: 'Create',
+                dataMode: 'Partial',
+                // editorOptions sits at the root of the editor arguments.
+                editorOptions: selectedOptions(),
+                printJob: {
+                    addPrintings: scenario.printings.map(item => ({
+                        printPositionCode: item.printPositionCode,
+                        printTechnologyCode: item.printTechnologyCode
+                    })),
+                    addProducts: {
+                        supplierCode: SUPPLIER_CODE,
+                        variants: scenario.variants.map(item => ({productCode: item.productCode}))
+                    }
+                }
+            };
+        }
+
+        function td_preview(scenarioId) {
+            const scenario = SCENARIOS.find(item => item.id === scenarioId);
+            showPayload(buildArgs(scenario));
+            logEvent('Preview', scenario.title, 'arguments built - editor not opened');
+        }
+
+        function td_open(scenarioId) {
+            const td = window.tronDesigner;
+            if (!td) {
+                alert('TronDesigner SDK is not initialized yet.');
+                return;
+            }
+
+            const scenario = SCENARIOS.find(item => item.id === scenarioId);
+            const args = buildArgs(scenario);
+
+            showPayload(args);
+            logEvent('Action', scenario.title, `showSelectedVariants: ${args.editorOptions.showSelectedVariants}, showSelectedPrintOptions: ${args.editorOptions.showSelectedPrintOptions}`, args);
+
+            td.openDesigner(args, {
+                mode: 'dialog',
+                onClose: (reason) => logEvent('Editor', 'Closed', `${scenario.title} - reason: ${reason}`)
+            });
+        }
+
+        function showPayload(args) {
+            document.getElementById('payload-json').textContent = JSON.stringify(args, null, 2);
+        }
+
+        // ---------------------------------------------------------------
+        // Result of the session - what ended up in the print job
+        // ---------------------------------------------------------------
+        function onTdReady() {
+            logEvent('Script', 'Initialized', 'TronDesigner API is ready');
+            window.tronDesigner.subscribeDesignerEvent('printJob', 'created', onPrintJobCreated);
+        }
+
+        function onPrintJobCreated(event) {
+            const printJob = event.detail || {};
+
+            document.getElementById('result-json').textContent = JSON.stringify({
+                printJobGuid: event.entityGuid,
+                variants: ((printJob.product && printJob.product.variants) || []).map(item => ({
+                    productCode: item.codeSupplier,
+                    title: item.title
+                })),
+                printings: (printJob.printings || []).map(item => ({
+                    printingGuid: item.printingGuid,
+                    printData: item.printData
+                }))
+            }, null, 2);
+
+            const variantCount = ((printJob.product && printJob.product.variants) || []).length;
+            const printingCount = (printJob.printings || []).length;
+            logEvent('PrintJob', 'Created', `GUID: ${event.entityGuid} - ${variantCount} variant(s), ${printingCount} printing(s)`);
+        }
+
+        // ---------------------------------------------------------------
+        // Rendering
+        // ---------------------------------------------------------------
+        function renderScenarios() {
+            document.getElementById('scenarios').innerHTML = SCENARIOS.map(scenario => `
+                <div class="example" style="width: 470px;">
+                    <span class="scenario-label ${scenario.broken ? 'warn' : ''}">
+                        ${scenario.broken ? 'contains wrong codes' : 'all codes valid'}
+                    </span>
+                    <h4 style="margin: 6px 0 10px;">${scenario.title}</h4>
+                    <table class="item-table">
+                        <thead>
+                        <tr>
+                            <th>Variant</th>
+                            <th>Code sent</th>
+                            <th>In catalogue</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        ${scenario.variants.map(item => `
+                            <tr>
+                                <td>${item.name}</td>
+                                <td><code class="${item.broken ? 'code-bad' : 'code-ok'}">${item.productCode}</code></td>
+                                <td><span class="badge ${item.broken ? 'bad' : 'ok'}">${item.broken ? 'not found' : 'found'}</span></td>
+                            </tr>`).join('')}
+                        </tbody>
+                    </table>
+                    <table class="item-table" style="margin-top: 12px;">
+                        <thead>
+                        <tr>
+                            <th>Printing</th>
+                            <th>Position / technology sent</th>
+                            <th>In catalogue</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        ${scenario.printings.map(item => `
+                            <tr>
+                                <td>${item.name}</td>
+                                <td><code class="${item.broken ? 'code-bad' : 'code-ok'}">${item.printPositionCode}</code>
+                                    / <code class="code-ok">${item.printTechnologyCode}</code></td>
+                                <td><span class="badge ${item.broken ? 'bad' : 'ok'}">${item.broken ? 'not found' : 'found'}</span></td>
+                            </tr>`).join('')}
+                        </tbody>
+                    </table>
+                    <p class="expectation"><strong>With <code>Missing</code>:</strong> ${scenario.expectation}</p>
+                    <div style="margin-top: 12px; display: flex; gap: 8px;">
+                        <button class="btn-sm" onclick="td_open('${scenario.id}')">Open Designer</button>
+                        <button class="btn-sm" onclick="td_preview('${scenario.id}')">Show arguments</button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function renderOptionSelects() {
+            ['opt-variants', 'opt-printings'].forEach(id => {
+                const select = document.getElementById(id);
+                select.innerHTML = OPTION_VALUES
+                    .map(value => `<option value="${value}"${value === 'Missing' ? ' selected' : ''}>${value}</option>`)
+                    .join('');
+            });
+        }
+
+        // ---------------------------------------------------------------
+        // Event log
+        // ---------------------------------------------------------------
+        let eventLog = [];
+
+        function logEvent(type, action, message, data = null) {
+            eventLog.push({timestamp: new Date().toLocaleTimeString(), type, action, message, data});
+            updateEventLog();
+        }
+
+        function updateEventLog() {
+            const logContainer = document.getElementById('event-log');
+            if (!logContainer) return;
+            logContainer.innerHTML = eventLog.map(e => `
+                <div class="event-entry">
+                    <span class="event-time">[${e.timestamp}]</span>
+                    <span class="event-type">${e.type}</span>.<span class="event-action">${e.action}</span>
+                    ${e.message ? '- ' + e.message : ''}
+                    ${e.data !== null && e.data !== undefined
+                        ? `<div class="event-data">${typeof e.data === 'string' ? e.data : JSON.stringify(e.data, null, 2)}</div>`
+                        : ''}
+                </div>
+            `).join('');
+            logContainer.scrollTop = logContainer.scrollHeight;
+        }
+
+        function clearLog() {
+            eventLog = [];
+            updateEventLog();
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            renderOptionSelects();
+            renderScenarios();
+        });
+    </script>
+    <title>Tron Designer Integration - Editor Options: showSelectedVariants / showSelectedPrintOptions</title>
+</head>
+<body>
+<div class="header">
+    <div><a href="https://www.trondesigner.com"><img src="https://cdn-webassets.promotron.com/images/td/logo-full-light-theme.svg" class="logo"></a></div>
+    <h1>
+        <span>TronDesigner</span> - Integration Examples<br>
+        <small>Docs:
+            <a href="https://help.promotron.com/en/help/articles/5362575-integration-scenarios" target="_blank">Scenarios</a> &nbsp;|&nbsp;
+            <a href="https://help.promotron.com/en/help/articles/8234354-integration-logic" target="_blank">Modes</a> &nbsp;|&nbsp;
+            <a href="https://help.promotron.com/articles/1831653-editor-arguments#ta1ew2ec4a2" target="_blank">Editor Arguments</a> &nbsp;|&nbsp;
+            <a href="https://help.promotron.com/en/help/collections/5977087-developer-guide" target="_blank">Developer Guide</a>
+        </small>
+    </h1>
+    <a href="index.html">Back to examples</a>
+</div>
+
+<div class="info-box" style="margin: 0 20px;">
+    <h3>Editor options - the <code>Missing</code> selector behaviour</h3>
+    <p><code>showSelectedVariants</code> and <code>showSelectedPrintOptions</code> live in the <code>editorOptions</code> block at the root of the
+        editor arguments. They decide whether the editor asks the user to pick variants / print options, or silently uses what the integration sent.</p>
+
+    <table class="values-table">
+        <thead>
+        <tr>
+            <th>Value</th>
+            <th><code>showSelectedVariants</code></th>
+            <th><code>showSelectedPrintOptions</code></th>
+        </tr>
+        </thead>
+        <tbody>
+        <tr>
+            <td><code>None</code></td>
+            <td>Dialog is not shown when variants are specified.</td>
+            <td>Dialog is not shown when print options are specified.</td>
+        </tr>
+        <tr>
+            <td><code>Selected</code></td>
+            <td>Only variants provided in arguments are shown; the user can remove them but cannot add new ones.</td>
+            <td>Only print options provided in arguments are shown; the user can remove them but cannot add new ones.</td>
+        </tr>
+        <tr>
+            <td><code>Missing</code></td>
+            <td>The variant selector is shown <strong>only when one or more provided variants are not found</strong>. The user can then remove or add any product variant.</td>
+            <td>The print option selector is shown <strong>only when one or more provided print options are not found</strong>.</td>
+        </tr>
+        <tr>
+            <td><code>All</code></td>
+            <td>The variant selector is always shown with all product variants; the provided ones are preselected.</td>
+            <td>The print option selector is always shown with all print options; the provided ones are preselected.</td>
+        </tr>
+        </tbody>
+    </table>
+
+    <p style="margin-top: 12px;"><code>Missing</code> is the safety net for catalogue drift: as long as every code your shop sends still exists, the user goes
+        straight into the design. As soon as a code disappears - a discontinued colour, a renamed print position - the editor falls back to a selector
+        instead of failing or quietly dropping the item.</p>
+    <p><strong>Note:</strong> the documentation marks <code>Missing</code> as <em>Coming Soon</em>. On an instance where it is not deployed yet, the
+        editor may fall back to its default behaviour - compare with the other values using the switches below.</p>
+    <p>All five scenarios use the same Teak notebook (<code>PFC</code>) with 3 variants and 2 printings. Wrong codes are marked with an
+        <code>XX</code> suffix so they cannot be found in the catalogue. Every button opens a <strong>new</strong> print job in <code>Create</code> mode.</p>
+</div>
+
+<div class="options-bar">
+    <strong>Editor options applied to all scenarios:</strong>
+    <label><code>showSelectedVariants</code>
+        <select id="opt-variants"></select>
+    </label>
+    <label><code>showSelectedPrintOptions</code>
+        <select id="opt-printings"></select>
+    </label>
+    <span style="color: #777;">Switch the values to compare <code>Missing</code> with <code>None</code>, <code>Selected</code> and <code>All</code> on the same payload.</span>
+</div>
+
+<div class="examples" id="scenarios"></div>
+
+<div class="section">
+    <div class="state-panel">
+        <div>
+            <h3>Last arguments sent to <code>openDesigner()</code></h3>
+            <pre class="code-panel" id="payload-json">(no request sent yet)</pre>
+        </div>
+        <div>
+            <h3>Print job created from the session</h3>
+            <pre class="code-panel" id="result-json">(no print job created yet)</pre>
+        </div>
+    </div>
+</div>
+
+<div class="section">
+    <div style="display: flex; justify-content: space-between; align-items: center;">
+        <h3>Event log</h3>
+        <button class="btn" onclick="clearLog()">Clear Log</button>
+    </div>
+    <div id="event-log" class="event-log">
+        <div style="color: #858585; text-align: center; padding: 50px;">
+            Waiting for events...
+        </div>
+    </div>
+</div>
+
+<div class="section" style="padding: 20px; background: #f9f9f9; border-radius: 8px;">
+    <h3>Implementation</h3>
+
+    <h4>Editor arguments with <code>Missing</code></h4>
+    <pre style="background: #fff; padding: 15px; border-radius: 4px; overflow-x: auto; font-size: 12px;"><code>window.tronDesigner.openDesigner({
+    openMode: "Create",
+    dataMode: "Exact",
+    editorOptions: {
+        showSelectedVariants: "Missing",      // None | Selected | Missing | All
+        showSelectedPrintOptions: "Missing"   // None | Selected | Missing | All
+    },
+    printJob: {
+        addPrintings: [
+            { printPositionCode: "front", printTechnologyCode: "GPE01" },
+            { printPositionCode: "back",  printTechnologyCode: "GPE01" }
+        ],
+        addProducts: {
+            supplierCode: "PFC",
+            variants: [
+                { productCode: "10601321" },   // red
+                { productCode: "10601301" },   // white
+                { productCode: "10601331" }    // orange
+            ]
+        }
+    }
+}, { mode: "dialog" });</code></pre>
+
+    <h4 style="margin-top: 20px;">Scenario 2 - variant codes that no longer exist</h4>
+    <pre style="background: #fff; padding: 15px; border-radius: 4px; overflow-x: auto; font-size: 12px;"><code>variants: [
+    { productCode: "10601321" },     // found
+    { productCode: "10601301XX" },   // not found -> triggers the variant selector
+    { productCode: "10601331XX" }    // not found
+]</code></pre>
+
+    <h4 style="margin-top: 20px;">Scenarios 3 and 4 - print positions that no longer exist</h4>
+    <pre style="background: #fff; padding: 15px; border-radius: 4px; overflow-x: auto; font-size: 12px;"><code>// one printing wrong -> selector opens, "front" stays preselected
+addPrintings: [
+    { printPositionCode: "front",  printTechnologyCode: "GPE01" },
+    { printPositionCode: "backXX", printTechnologyCode: "GPE01" }
+]
+
+// both printings wrong -> selector opens with nothing preselected
+addPrintings: [
+    { printPositionCode: "frontXX", printTechnologyCode: "GPE01" },
+    { printPositionCode: "backXX",  printTechnologyCode: "GPE01" }
+]</code></pre>
+
+    <h4 style="margin-top: 20px;">Scenario 5 - one variant and one printing missing</h4>
+    <pre style="background: #fff; padding: 15px; border-radius: 4px; overflow-x: auto; font-size: 12px;"><code>// both options are evaluated independently -> both selectors open
+addProducts: {
+    supplierCode: "PFC",
+    variants: [
+        { productCode: "10601321" },     // found
+        { productCode: "10601301" },     // found
+        { productCode: "10601331XX" }    // not found -> variant selector
+    ]
+},
+addPrintings: [
+    { printPositionCode: "front",  printTechnologyCode: "GPE01" },   // found
+    { printPositionCode: "backXX", printTechnologyCode: "GPE01" }    // not found -> print option selector
+]</code></pre>
+
+    <h4 style="margin-top: 20px;">Same options with the JS builder</h4>
+    <pre style="background: #fff; padding: 15px; border-radius: 4px; overflow-x: auto; font-size: 12px;"><code>const td = window.tronDesigner;
+
+td.setExactProduct("PFC", undefined, (b) => {
+    b.addVariant("10601321");
+    b.addVariant("10601301");
+    b.addVariant("10601331");
+});
+td.addExactPrinting("front", "GPE01");
+td.addExactPrinting("back", "GPE01");
+
+td.argsBuilder.setEditorOptions({
+    showSelectedVariants: "Missing",
+    showSelectedPrintOptions: "Missing"
+});
+
+td.open({ mode: "dialog" });</code></pre>
+
+    <p style="font-size: 13px; color: #555;">If <code>editorOptions</code> is omitted entirely, the SDK sends
+        <code>{ showSelectedVariants: "None", showSelectedPrintOptions: "None" }</code> - the same applies to each of the two keys individually.</p>
+</div>
+</body>
+</html>
